@@ -9,4 +9,5 @@ include_directories(include)
 add_executable(detector
     src/main.cpp
     src/scanner.cpp
+    src/reader.cpp
 )
