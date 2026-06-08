@@ -1,6 +1,7 @@
 #include <iostream>
 #include "scanner.h"
 #include "reader.h"
+#include "extractor.h"
 
 int main() {
     std::string path;
@@ -9,22 +10,21 @@ int main() {
 
     // Step 1: Scan for files
     std::vector<std::string> files = scanDirectory(path);
-    std::cout << "\nFound " << files.size() << " file(s).\n";
+    std::cout << "\nFound " << files.size() << " file(s):\n";
+    for (const auto& f : files) {
+        std::cout << "  " << f << "\n";
+    }
 
     // Step 2: Read file contents
     std::map<std::string, std::string> contents = readFiles(files);
+    std::cout << "\nRead " << contents.size() << " file(s).\n";
 
-    // Step 3: Print preview of each file
-    for (const auto& entry : contents) {
-        std::cout << "\n--- " << entry.first << " ---\n";
-        // Print only first 3 lines as preview
-        std::string content = entry.second;
-        int newlines = 0;
-        for (char c : content) {
-            std::cout << c;
-            if (c == '\n') newlines++;
-            if (newlines == 3) break;
-        }
+    // Step 3: Extract functions
+    std::vector<Function> functions = extractFunctions(contents);
+
+    std::cout << "\nExtracted " << functions.size() << " function(s):\n";
+    for (const auto& func : functions) {
+        std::cout << "  [" << func.filename << "] " << func.name << "\n";
     }
 
     return 0;
