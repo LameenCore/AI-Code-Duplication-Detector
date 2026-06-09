@@ -11,4 +11,5 @@ add_executable(detector
     src/scanner.cpp
     src/reader.cpp
     src/extractor.cpp
+    src/detector.cpp
 )
