@@ -1,9 +1,10 @@
+#define _GLIBCXX_USE_CXX11_ABI 1
 #include <iostream>
-#include <iomanip>
 #include "scanner.h"
 #include "reader.h"
 #include "extractor.h"
 #include "detector.h"
+#include "reporter.h"
 
 int main() {
     std::string path;
@@ -17,28 +18,19 @@ int main() {
     // Step 2: Read
     std::map<std::string, std::string> contents = readFiles(files);
 
-    // Step 3: Extract functions
+    // Step 3: Extract
     std::vector<Function> functions = extractFunctions(contents);
     std::cout << "Extracted " << functions.size() << " function(s).\n";
 
-    // Step 4: Detect duplicates
+    // Step 4: Detect
     std::cout << "\nAnalyzing for duplicates...\n";
     std::vector<DuplicatePair> duplicates = detectDuplicates(functions, 70.0);
 
-    if (duplicates.empty()) {
-        std::cout << "\nNo duplicates found.\n";
-    } else {
-        std::cout << "\nFound " << duplicates.size() << " duplicate pair(s):\n";
-        std::cout << std::string(60, '-') << "\n";
+    // Step 5: Print to terminal
+    writeReport(std::cout, duplicates, functions, path);
 
-        for (const auto& pair : duplicates) {
-            std::cout << std::fixed << std::setprecision(1);
-            std::cout << "[" << pair.similarity << "% match]\n";
-            std::cout << "  " << pair.func1.filename << " :: " << pair.func1.name << "\n";
-            std::cout << "  " << pair.func2.filename << " :: " << pair.func2.name << "\n";
-            std::cout << std::string(60, '-') << "\n";
-        }
-    }
+    // Step 6: Save to file
+    saveReportToFile("report.txt", duplicates, functions, path);
 
     return 0;
 }
