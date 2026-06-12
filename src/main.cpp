@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <vector>
 #include "scanner.h"
 #include "reader.h"
 #include "extractor.h"
@@ -13,26 +14,25 @@ void printUsage() {
     std::cout << "  --path <dir>        Path to scan (required)\n";
     std::cout << "  --threshold <num>   Similarity threshold 0-100 (default: 80)\n";
     std::cout << "  --output <file>     Output report filename (default: report.txt)\n";
+    std::cout << "  --ignore <dir>      Folder to ignore (can be used multiple times)\n";
     std::cout << "  --help              Show this help message\n\n";
     std::cout << "Examples:\n";
     std::cout << "  detector.exe --path ../src\n";
-    std::cout << "  detector.exe --path ../src --threshold 85\n";
-    std::cout << "  detector.exe --path ../src --threshold 70 --output results.txt\n\n";
+    std::cout << "  detector.exe --path .. --ignore build --ignore vendor\n";
+    std::cout << "  detector.exe --path .. --threshold 70 --output results.txt\n\n";
 }
 
 int main(int argc, char* argv[]) {
-    // Default values
     std::string path = "";
     double threshold = 80.0;
     std::string outputFile = "report.txt";
+    std::vector<std::string> ignorePaths;
 
-    // If no arguments given, show usage
     if (argc == 1) {
         printUsage();
         return 0;
     }
 
-    // Parse arguments
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
@@ -61,6 +61,10 @@ int main(int argc, char* argv[]) {
             outputFile = argv[i + 1];
             i++;
         }
+        else if (arg == "--ignore" && i + 1 < argc) {
+            ignorePaths.push_back(argv[i + 1]);
+            i++;
+        }
         else {
             std::cerr << "Unknown argument: " << arg << "\n";
             printUsage();
@@ -68,20 +72,25 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Path is required
     if (path.empty()) {
         std::cerr << "Error: --path is required\n";
         printUsage();
         return 1;
     }
 
-    // Run the detector
+    // Print ignored paths if any
     std::cout << "Scanning: " << path << "\n";
     std::cout << "Threshold: " << threshold << "%\n";
-    std::cout << "Output: " << outputFile << "\n\n";
+    std::cout << "Output: " << outputFile << "\n";
+    if (!ignorePaths.empty()) {
+        std::cout << "Ignoring: ";
+        for (const auto& ig : ignorePaths) std::cout << ig << " ";
+        std::cout << "\n";
+    }
+    std::cout << "\n";
 
-    // Step 1: Scan
-    std::vector<std::string> files = scanDirectory(path);
+    // Step 1: Scan with ignore list
+    std::vector<std::string> files = scanDirectory(path, ignorePaths);
     std::cout << "Found " << files.size() << " file(s).\n";
 
     // Step 2: Read
