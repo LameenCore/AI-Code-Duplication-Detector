@@ -1,3 +1,4 @@
+#include "normalizer.h"
 #include "detector.h"
 #include <algorithm>
 #include <iostream>
@@ -37,12 +38,14 @@ double calculateSimilarity(const std::string& s1, const std::string& s2) {
     if (s1.empty() && s2.empty()) return 100.0;
     if (s1.empty() || s2.empty()) return 0.0;
 
-    // For large functions, only compare first 500 chars for performance
-    std::string a = s1.substr(0, std::min((int)s1.size(), 500));
-    std::string b = s2.substr(0, std::min((int)s2.size(), 500));
+    // Normalize both before comparing
+    std::string a = normalizeCode(s1.substr(0, std::min((int)s1.size(), 500)));
+    std::string b = normalizeCode(s2.substr(0, std::min((int)s2.size(), 500)));
 
     int distance = levenshteinDistance(a, b);
     int maxLen = std::max(a.size(), b.size());
+
+    if (maxLen == 0) return 100.0;
 
     return (1.0 - (double)distance / maxLen) * 100.0;
 }

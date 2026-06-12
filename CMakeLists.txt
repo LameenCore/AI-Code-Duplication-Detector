@@ -13,4 +13,5 @@ add_executable(detector
     src/extractor.cpp
     src/detector.cpp
     src/reporter.cpp
+    src/normalizer.cpp
 )
