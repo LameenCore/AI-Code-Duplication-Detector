@@ -1,3 +1,6 @@
+#include <regex>
+#include <map>
+#include <unordered_set>
 #include "normalizer.h"
 #include <sstream>
 #include <algorithm>
@@ -86,6 +89,58 @@ std::string normalizeCode(const std::string& code) {
 
     // Step 4: Trim
     result = trim(result);
+
+    return result;
+}
+
+
+// List of C++ keywords to preserve (not replace with VAR_N)
+static const std::unordered_set<std::string> cppKeywords = {
+    "int", "float", "double", "char", "bool", "void", "long", "short",
+    "unsigned", "signed", "const", "static", "inline", "return", "if",
+    "else", "for", "while", "do", "switch", "case", "break", "continue",
+    "class", "struct", "public", "private", "protected", "new", "delete",
+    "true", "false", "nullptr", "auto", "this", "namespace", "using",
+    "include", "define", "string", "vector", "map", "cout", "cin",
+    "endl", "std", "size_t", "uint8_t", "int32_t", "int64_t"
+};
+
+std::string normalizeVariables(const std::string& code) {
+    std::string result;
+    std::map<std::string, std::string> varMap;
+    int varCounter = 0;
+
+    // Split into tokens using regex
+    std::regex tokenPattern("[a-zA-Z_][a-zA-Z0-9_]*|[0-9]+|[+\\-*/=<>!&|]+|[{}();,\\[\\].]");
+    
+    auto begin = std::sregex_iterator(code.begin(), code.end(), tokenPattern);
+    auto end = std::sregex_iterator();
+
+    size_t lastPos = 0;
+
+    for (auto it = begin; it != end; ++it) {
+        std::smatch match = *it;
+        std::string token = match.str();
+        size_t matchPos = match.position();
+
+        // Add any whitespace/characters between tokens
+        result += code.substr(lastPos, matchPos - lastPos);
+        lastPos = matchPos + token.size();
+
+        // Check if token is a C++ keyword or number
+        bool isKeyword = cppKeywords.count(token) > 0;
+        bool isNumber = !token.empty() && isdigit(token[0]);
+
+        if (!isKeyword && !isNumber && isalpha(token[0])) {
+            // It's a variable/function name — replace with VAR_N
+            if (varMap.find(token) == varMap.end()) {
+                varMap[token] = "VAR_" + std::to_string(varCounter++);
+            }
+            result += varMap[token];
+        } else {
+            result += token;
+        }
+    }
 
     return result;
 }

@@ -35,11 +35,17 @@ double calculateSimilarity(const std::string& s1, const std::string& s2) {
     if (s1.empty() && s2.empty()) return 100.0;
     if (s1.empty() || s2.empty()) return 0.0;
 
-    std::string a = normalizeCode(s1.substr(0, std::min((int)s1.size(), 500)));
-    std::string b = normalizeCode(s2.substr(0, std::min((int)s2.size(), 500)));
+    // First normalize code (strip comments/whitespace)
+    std::string normA = normalizeCode(s1.substr(0, std::min((int)s1.size(), 500)));
+    std::string normB = normalizeCode(s2.substr(0, std::min((int)s2.size(), 500)));
 
-    int distance = levenshteinDistance(a, b);
-    int maxLen = std::max(a.size(), b.size());
+    // Then normalize variables (replace variable names with VAR_N)
+    std::string varNormA = normalizeVariables(normA);
+    std::string varNormB = normalizeVariables(normB);
+
+    // Compare variable-normalized versions
+    int distance = levenshteinDistance(varNormA, varNormB);
+    int maxLen = std::max(varNormA.size(), varNormB.size());
 
     if (maxLen == 0) return 100.0;
     return (1.0 - (double)distance / maxLen) * 100.0;
