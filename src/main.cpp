@@ -6,6 +6,7 @@
 #include "extractor.h"
 #include "detector.h"
 #include "reporter.h"
+#include "clang_extractor.h"
 
 
 void printUsage() {
@@ -72,6 +73,10 @@ int main(int argc, char* argv[]) {
             ignorePaths.push_back(argv[i + 1]);
             i++;
         }
+        else if (arg == "--clang-test" && i + 1 < argc) {
+            extractFunctionsWithClang(argv[i + 1]);
+            return 0;
+         }
         else {
             std::cerr << "Unknown argument: " << arg << "\n";
             printUsage();
