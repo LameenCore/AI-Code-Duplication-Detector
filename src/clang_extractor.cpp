@@ -1,43 +1,76 @@
 #include "clang_extractor.h"
 #include <clang-c/Index.h>
 #include <iostream>
+#include <fstream>
+#include <sstream>
+
+struct VisitorData {
+    std::vector<Function>* functions;
+    std::string filename;
+    std::string fileContent;
+};
 
 CXChildVisitResult visitor(CXCursor cursor, CXCursor parent, CXClientData clientData) {
-    if (clang_getCursorKind(cursor) == CXCursor_FunctionDecl) {
+    VisitorData* data = static_cast<VisitorData*>(clientData);
+
+    if (clang_getCursorKind(cursor) == CXCursor_FunctionDecl && clang_isCursorDefinition(cursor)) {
         CXString name = clang_getCursorSpelling(cursor);
-        CXSourceLocation location = clang_getCursorLocation(cursor);
 
-        CXFile file;
-        unsigned line, column;
-        clang_getSpellingLocation(location, &file, &line, &column, nullptr);
+        CXSourceRange extent = clang_getCursorExtent(cursor);
+        CXSourceLocation startLoc = clang_getRangeStart(extent);
+        CXSourceLocation endLoc = clang_getRangeEnd(extent);
 
-        std::cout << "Found function: " << clang_getCString(name)
-                   << " at line " << line << std::endl;
+        unsigned startOffset, endOffset;
+        clang_getSpellingLocation(startLoc, nullptr, nullptr, nullptr, &startOffset);
+        clang_getSpellingLocation(endLoc, nullptr, nullptr, nullptr, &endOffset);
+
+        std::string body = data->fileContent.substr(startOffset, endOffset - startOffset);
+
+        Function func;
+        func.name = clang_getCString(name);
+        func.body = body;
+        func.filename = data->filename;
+
+        data->functions->push_back(func);
 
         clang_disposeString(name);
     }
     return CXChildVisit_Recurse;
 }
 
-void extractFunctionsWithClang(const std::string& filePath) {
-    CXIndex index = clang_createIndex(0, 0);
+std::vector<Function> extractFunctionsWithClang(const std::string& filePath) {
+    std::vector<Function> functions;
 
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Error: could not open " << filePath << std::endl;
+        return functions;
+    }
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string fileContent = buffer.str();
+
+    CXIndex index = clang_createIndex(0, 0);
     CXTranslationUnit unit = clang_parseTranslationUnit(
-        index,
-        filePath.c_str(),
-        nullptr, 0,
-        nullptr, 0,
-        CXTranslationUnit_None
+        index, filePath.c_str(), nullptr, 0, nullptr, 0, CXTranslationUnit_None
     );
 
     if (unit == nullptr) {
         std::cerr << "Error: failed to parse " << filePath << std::endl;
-        return;
+        clang_disposeIndex(index);
+        return functions;
     }
 
+    VisitorData data;
+    data.functions = &functions;
+    data.filename = filePath;
+    data.fileContent = fileContent;
+
     CXCursor rootCursor = clang_getTranslationUnitCursor(unit);
-    clang_visitChildren(rootCursor, visitor, nullptr);
+    clang_visitChildren(rootCursor, visitor, &data);
 
     clang_disposeTranslationUnit(unit);
     clang_disposeIndex(index);
+
+    return functions;
 }

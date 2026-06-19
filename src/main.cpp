@@ -74,9 +74,13 @@ int main(int argc, char* argv[]) {
             i++;
         }
         else if (arg == "--clang-test" && i + 1 < argc) {
-            extractFunctionsWithClang(argv[i + 1]);
+            std::vector<Function> funcs = extractFunctionsWithClang(argv[i + 1]);
+            for (const auto& f : funcs) {
+            std::cout << "Function: " << f.name << " (" << f.body.size() << " chars)\n";
+            std::cout << "----\n" << f.body << "\n----\n\n";
+            }
             return 0;
-         }
+        }
         else {
             std::cerr << "Unknown argument: " << arg << "\n";
             printUsage();

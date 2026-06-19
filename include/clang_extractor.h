@@ -2,7 +2,9 @@
 #define CLANG_EXTRACTOR_H
 
 #include <string>
+#include <vector>
+#include "extractor.h"
 
-void extractFunctionsWithClang(const std::string& filePath);
+std::vector<Function> extractFunctionsWithClang(const std::string& filePath);
 
 #endif
