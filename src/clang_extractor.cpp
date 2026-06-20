@@ -74,3 +74,14 @@ std::vector<Function> extractFunctionsWithClang(const std::string& filePath) {
 
     return functions;
 }
+
+std::vector<Function> extractFunctionsWithClangMulti(const std::vector<std::string>& filePaths) {
+    std::vector<Function> allFunctions;
+
+    for (const auto& path : filePaths) {
+        std::vector<Function> fileFunctions = extractFunctionsWithClang(path);
+        allFunctions.insert(allFunctions.end(), fileFunctions.begin(), fileFunctions.end());
+    }
+
+    return allFunctions;
+}

@@ -109,11 +109,8 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> files = scanDirectory(path, ignorePaths);
     std::cout << "Found " << files.size() << " file(s).\n";
 
-    // Step 2: Read
-    std::map<std::string, std::string> contents = readFiles(files);
-
-    // Step 3: Extract
-    std::vector<Function> functions = extractFunctions(contents);
+    // Step 2 & 3: Extract functions using libclang's real AST (replaces brace-counting)
+    std::vector<Function> functions = extractFunctionsWithClangMulti(files);
     std::cout << "Extracted " << functions.size() << " function(s).\n\n";
 
     // Step 4: Detect

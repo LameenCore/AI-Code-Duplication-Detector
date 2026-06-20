@@ -6,5 +6,6 @@
 #include "extractor.h"
 
 std::vector<Function> extractFunctionsWithClang(const std::string& filePath);
+std::vector<Function> extractFunctionsWithClangMulti(const std::vector<std::string>& filePaths);
 
 #endif
