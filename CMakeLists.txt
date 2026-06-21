@@ -16,6 +16,7 @@ add_executable(detector
     src/reporter.cpp
     src/normalizer.cpp
     src/clang_extractor.cpp
+    src/winnowing.cpp
 )
 
 target_link_libraries(detector "${CMAKE_SOURCE_DIR}/libs/libclang.dll.a")

@@ -7,6 +7,9 @@
 #include "detector.h"
 #include "reporter.h"
 #include "clang_extractor.h"
+#include "winnowing.h"
+#include <fstream>
+#include <sstream>
 
 
 void printUsage() {
@@ -79,6 +82,31 @@ int main(int argc, char* argv[]) {
             std::cout << "Function: " << f.name << " (" << f.body.size() << " chars)\n";
             std::cout << "----\n" << f.body << "\n----\n\n";
             }
+            return 0;
+        }
+        else if (arg == "--winnow-test" && i + 2 < argc) {
+            std::string file1 = argv[i + 1];
+            std::string file2 = argv[i + 2];
+            i += 2;
+
+            std::ifstream f1(file1, std::ios::binary);
+            std::ifstream f2(file2, std::ios::binary);
+            std::stringstream ss1, ss2;
+            ss1 << f1.rdbuf();
+            ss2 << f2.rdbuf();
+
+            std::vector<std::string> tokens1 = tokenize(ss1.str());
+            std::vector<std::string> tokens2 = tokenize(ss2.str());
+
+            std::set<size_t> fp1 = getFingerprints(tokens1, 4, 4);
+            std::set<size_t> fp2 = getFingerprints(tokens2, 4, 4);
+
+            double similarity = fingerprintSimilarity(fp1, fp2);
+
+            std::cout << "File 1: " << file1 << " (" << tokens1.size() << " tokens, " << fp1.size() << " fingerprints)\n";
+            std::cout << "File 2: " << file2 << " (" << tokens2.size() << " tokens, " << fp2.size() << " fingerprints)\n";
+            std::cout << "Fingerprint similarity: " << similarity << "%\n";
+
             return 0;
         }
         else {
