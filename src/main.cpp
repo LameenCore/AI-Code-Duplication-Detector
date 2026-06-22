@@ -9,6 +9,7 @@
 #include "clang_extractor.h"
 #include "winnowing.h"
 #include "gitscanner.h"
+#include "config.h"
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -27,11 +28,14 @@ void printUsage() {
     std::cout << "  --json <file>       Save report as JSON\n";
     std::cout << "  --ignore <dir>      Folder to ignore (can be used multiple times)\n";
     std::cout << "  --git-only          Only scan files tracked by git (skips ignored/build files)\n";
+    std::cout << "  --config <file>     Load default settings from a key=value config file\n";
     std::cout << "  --help              Show this help message\n\n";
     std::cout << "Examples:\n";
     std::cout << "  detector.exe --path ../src\n";
     std::cout << "  detector.exe --path .. --ignore build --ignore vendor\n";
-    std::cout << "  detector.exe --path .. --threshold 70 --output results.txt\n\n";
+    std::cout << "  detector.exe --path .. --threshold 70 --output results.txt\n";
+    std::cout << "  detector.exe --config myconfig.txt\n";
+    std::cout << "  detector.exe --config myconfig.txt --threshold 90   (CLI flag overrides config)\n\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -46,6 +50,19 @@ int main(int argc, char* argv[]) {
     if (argc == 1) {
         printUsage();
         return 0;
+    }
+
+    // Pre-pass: look for --config first, before any other flags are
+    // processed. Whatever it sets becomes the new "default" — the main
+    // parsing loop below still runs afterward, so any matching CLI flag
+    // typed alongside --config will overwrite the config file's value.
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--config" && i + 1 < argc) {
+            loadConfig(argv[i + 1], path, threshold, outputFile,
+                       htmlOutputFile, jsonOutputFile, ignorePaths, gitOnly);
+            break;
+        }
     }
 
     for (int i = 1; i < argc; i++) {
@@ -90,6 +107,9 @@ int main(int argc, char* argv[]) {
         }
         else if (arg == "--git-only") {
             gitOnly = true;
+        }
+        else if (arg == "--config" && i + 1 < argc) {
+            i++; // already handled in the pre-pass above
         }
         else if (arg == "--clang-test" && i + 1 < argc) {
             std::vector<Function> funcs = extractFunctionsWithClang(argv[i + 1]);

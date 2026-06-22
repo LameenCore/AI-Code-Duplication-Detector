@@ -1,0 +1,10 @@
+# Sample config file for the duplication detector
+# Lines starting with # are comments and are ignored
+# Format: key=value, one per line
+
+path=..
+threshold=75
+output=report.txt
+html=report.html
+ignore=build
+git-only=true
