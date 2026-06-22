@@ -20,6 +20,7 @@ void printUsage() {
     std::cout << "  --threshold <num>   Similarity threshold 0-100 (default: 80)\n";
     std::cout << "  --output <file>     Output report filename (default: report.txt)\n";
     std::cout << "  --html <file>       Save report as HTML\n";
+    std::cout << "  --json <file>       Save report as JSON\n";
     std::cout << "  --ignore <dir>      Folder to ignore (can be used multiple times)\n";
     std::cout << "  --help              Show this help message\n\n";
     std::cout << "Examples:\n";
@@ -33,6 +34,7 @@ int main(int argc, char* argv[]) {
     double threshold = 80.0;
     std::string outputFile = "report.txt";
     std::string htmlOutputFile = "";
+    std::string jsonOutputFile = "";
     std::vector<std::string> ignorePaths;
 
     if (argc == 1) {
@@ -70,6 +72,10 @@ int main(int argc, char* argv[]) {
         }
         else if (arg == "--html" && i + 1 < argc) {
             htmlOutputFile = argv[i + 1];
+            i++;
+        }
+        else if (arg == "--json" && i + 1 < argc) {
+            jsonOutputFile = argv[i + 1];
             i++;
         }
         else if (arg == "--ignore" && i + 1 < argc) {
@@ -154,6 +160,11 @@ int main(int argc, char* argv[]) {
     // Step 7: Save HTML report if requested
     if (!htmlOutputFile.empty()) {
         writeHtmlReport(htmlOutputFile, duplicates, functions, path);
+    }
+
+    // Step 8: Save JSON report if requested
+    if (!jsonOutputFile.empty()) {
+        writeJsonReport(jsonOutputFile, duplicates, functions, path);
     }
 
     return 0;

@@ -4,6 +4,24 @@
 #include <iostream>
 #include <ctime>
 
+// Escapes characters that would otherwise break JSON string syntax
+// (" and \), plus control characters like newlines and tabs.
+std::string escapeJson(const std::string& input) {
+    std::string output;
+    output.reserve(input.size());
+    for (char c : input) {
+        switch (c) {
+            case '"':  output += "\\\""; break;
+            case '\\': output += "\\\\"; break;
+            case '\n': output += "\\n"; break;
+            case '\r': output += "\\r"; break;
+            case '\t': output += "\\t"; break;
+            default:   output += c; break;
+        }
+    }
+    return output;
+}
+
 std::string getCurrentTime() {
     std::time_t now = std::time(nullptr);
     char buf[80];
@@ -132,4 +150,48 @@ void writeHtmlReport(const std::string& filename,
     file.close();
 
     std::cout << "HTML report saved to: " << filename << std::endl;
+}
+
+void writeJsonReport(const std::string& filename,
+                      const std::vector<DuplicatePair>& duplicates,
+                      const std::vector<Function>& functions,
+                      const std::string& scannedPath) {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: could not create JSON report file." << std::endl;
+        return;
+    }
+
+    double duplicationRate = 0.0;
+    if (!functions.empty()) {
+        duplicationRate = (double)(duplicates.size() * 2) / functions.size() * 100.0;
+    }
+
+    file << std::fixed << std::setprecision(1);
+
+    file << "{\n";
+    file << "  \"scannedPath\": \"" << escapeJson(scannedPath) << "\",\n";
+    file << "  \"generated\": \"" << escapeJson(getCurrentTime()) << "\",\n";
+    file << "  \"totalFunctions\": " << functions.size() << ",\n";
+    file << "  \"duplicatesFound\": " << duplicates.size() << ",\n";
+    file << "  \"duplicationRate\": " << duplicationRate << ",\n";
+    file << "  \"duplicates\": [\n";
+
+    for (size_t i = 0; i < duplicates.size(); i++) {
+        const auto& pair = duplicates[i];
+        file << "    {\n";
+        file << "      \"similarity\": " << pair.similarity << ",\n";
+        file << "      \"function1\": \"" << escapeJson(pair.func1.name) << "\",\n";
+        file << "      \"file1\": \"" << escapeJson(pair.func1.filename) << "\",\n";
+        file << "      \"function2\": \"" << escapeJson(pair.func2.name) << "\",\n";
+        file << "      \"file2\": \"" << escapeJson(pair.func2.filename) << "\"\n";
+        file << "    }" << (i + 1 < duplicates.size() ? "," : "") << "\n";
+    }
+
+    file << "  ]\n";
+    file << "}\n";
+
+    file.close();
+
+    std::cout << "JSON report saved to: " << filename << std::endl;
 }
