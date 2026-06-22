@@ -8,9 +8,13 @@
 #include "reporter.h"
 #include "clang_extractor.h"
 #include "winnowing.h"
+#include "gitscanner.h"
 #include <fstream>
 #include <sstream>
+#include <filesystem>
+#include <set>
 
+namespace fs = std::filesystem;
 
 void printUsage() {
     std::cout << "\nUsage:\n";
@@ -22,6 +26,7 @@ void printUsage() {
     std::cout << "  --html <file>       Save report as HTML\n";
     std::cout << "  --json <file>       Save report as JSON\n";
     std::cout << "  --ignore <dir>      Folder to ignore (can be used multiple times)\n";
+    std::cout << "  --git-only          Only scan files tracked by git (skips ignored/build files)\n";
     std::cout << "  --help              Show this help message\n\n";
     std::cout << "Examples:\n";
     std::cout << "  detector.exe --path ../src\n";
@@ -36,6 +41,7 @@ int main(int argc, char* argv[]) {
     std::string htmlOutputFile = "";
     std::string jsonOutputFile = "";
     std::vector<std::string> ignorePaths;
+    bool gitOnly = false;
 
     if (argc == 1) {
         printUsage();
@@ -81,6 +87,9 @@ int main(int argc, char* argv[]) {
         else if (arg == "--ignore" && i + 1 < argc) {
             ignorePaths.push_back(argv[i + 1]);
             i++;
+        }
+        else if (arg == "--git-only") {
+            gitOnly = true;
         }
         else if (arg == "--clang-test" && i + 1 < argc) {
             std::vector<Function> funcs = extractFunctionsWithClang(argv[i + 1]);
@@ -141,6 +150,29 @@ int main(int argc, char* argv[]) {
 
     // Step 1: Scan with ignore list
     std::vector<std::string> files = scanDirectory(path, ignorePaths);
+
+    // Step 1b: If --git-only was requested, narrow the list down to
+    // only files git is actually tracking in this repo.
+    if (gitOnly) {
+        if (!isGitRepo(path)) {
+            std::cerr << "Warning: --git-only was given but " << path
+                       << " is not inside a git repository. Scanning all files instead.\n";
+        } else {
+            std::vector<std::string> tracked = getGitTrackedFiles(path);
+            std::set<std::string> trackedSet(tracked.begin(), tracked.end());
+
+            std::vector<std::string> filtered;
+            for (const auto& f : files) {
+                std::string relPath = fs::relative(f, path).generic_string();
+                if (trackedSet.count(relPath)) {
+                    filtered.push_back(f);
+                }
+            }
+            files = filtered;
+            std::cout << "Git-aware mode: " << files.size() << " of the scanned files are tracked by git.\n";
+        }
+    }
+
     std::cout << "Found " << files.size() << " file(s).\n";
 
     // Step 2 & 3: Extract functions using libclang's real AST (replaces brace-counting)
