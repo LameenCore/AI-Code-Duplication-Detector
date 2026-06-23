@@ -10,6 +10,7 @@
 #include "winnowing.h"
 #include "gitscanner.h"
 #include "config.h"
+#include "onnxruntime_cxx_api.h"
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -29,6 +30,7 @@ void printUsage() {
     std::cout << "  --ignore <dir>      Folder to ignore (can be used multiple times)\n";
     std::cout << "  --git-only          Only scan files tracked by git (skips ignored/build files)\n";
     std::cout << "  --config <file>     Load default settings from a key=value config file\n";
+    std::cout << "  --onnx-test         Smoke-test the ONNX Runtime setup (prints version)\n";
     std::cout << "  --help              Show this help message\n\n";
     std::cout << "Examples:\n";
     std::cout << "  detector.exe --path ../src\n";
@@ -116,6 +118,17 @@ int main(int argc, char* argv[]) {
             for (const auto& f : funcs) {
             std::cout << "Function: " << f.name << " (" << f.body.size() << " chars)\n";
             std::cout << "----\n" << f.body << "\n----\n\n";
+            }
+            return 0;
+        }
+        else if (arg == "--onnx-test") {
+            try {
+                Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "onnx-test");
+                std::cout << "ONNX Runtime initialized successfully.\n";
+                std::cout << "ONNX Runtime version: " << Ort::GetVersionString() << "\n";
+            } catch (const Ort::Exception& e) {
+                std::cerr << "ONNX Runtime error: " << e.what() << "\n";
+                return 1;
             }
             return 0;
         }
