@@ -20,6 +20,7 @@ add_executable(detector
     src/winnowing.cpp
     src/gitscanner.cpp
     src/config.cpp
+    src/embedder.cpp
 )
 
 target_link_libraries(detector
