@@ -12,6 +12,8 @@
 #include "config.h"
 #include "onnxruntime_cxx_api.h"
 #include "embedder.h"
+#include "tokenizer.h"
+#include "similarity.h"
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -33,6 +35,9 @@ void printUsage() {
     std::cout << "  --config <file>     Load default settings from a key=value config file\n";
     std::cout << "  --onnx-test         Smoke-test the ONNX Runtime setup (prints version)\n";
     std::cout << "  --embed-test <onnx> Run CodeBERT inference on a fixed test sentence\n";
+    std::cout << "  --tokenize-test <tokenizer.json>   Encode a fixed test sentence, print ids\n";
+    std::cout << "  --embed <onnx> <tokenizer.json> <text>   Real text -> tokenizer -> embedding\n";
+    std::cout << "  --similarity-test <onnx> <tokenizer.json>   Embed 3 sample snippets, print pairwise cosine similarity\n";
     std::cout << "  --help              Show this help message\n\n";
     std::cout << "Examples:\n";
     std::cout << "  detector.exe --path ../src\n";
@@ -142,6 +147,76 @@ int main(int argc, char* argv[]) {
             } catch (const Ort::Exception& e) {
                 std::cerr << "ONNX Runtime error: " << e.what() << "\n";
                 return 1;
+            }
+            return 0;
+        }
+        else if (arg == "--tokenize-test" && i + 1 < argc) {
+            std::string tokenizerPath = argv[i + 1];
+            i++;
+            Tokenizer tok;
+            if (!tok.load(tokenizerPath)) {
+                return 1;
+            }
+            std::string sample = "int add(int a, int b) { return a + b; }";
+            std::vector<int64_t> ids = tok.encode(sample);
+            std::cout << "Encoded \"" << sample << "\" into " << ids.size() << " ids:\n[";
+            for (size_t k = 0; k < ids.size(); k++) {
+                std::cout << ids[k];
+                if (k + 1 < ids.size()) std::cout << ", ";
+            }
+            std::cout << "]\n";
+            std::cout << "Ground truth (from tools/export_codebert.py):\n";
+            std::cout << "[0, 2544, 1606, 1640, 2544, 10, 6, 6979, 741, 43, 25522, 671, 10, 2055, 741, 131, 35524, 2]\n";
+            return 0;
+        }
+        else if (arg == "--embed" && i + 3 < argc) {
+            std::string modelPath = argv[i + 1];
+            std::string tokenizerPath = argv[i + 2];
+            std::string text = argv[i + 3];
+            i += 3;
+            try {
+                embedText(modelPath, tokenizerPath, text);
+            } catch (const Ort::Exception& e) {
+                std::cerr << "ONNX Runtime error: " << e.what() << "\n";
+                return 1;
+            }
+            return 0;
+        }
+        else if (arg == "--similarity-test" && i + 2 < argc) {
+            std::string modelPath = argv[i + 1];
+            std::string tokenizerPath = argv[i + 2];
+            i += 2;
+
+            // Three snippets: the first two are the *same logic* under
+            // different names (the kind of thing an AI assistant might
+            // generate twice with slightly different wording); the third
+            // is genuinely unrelated. A good semantic similarity check
+            // should rank the first pair much higher than either against
+            // the third.
+            std::vector<std::pair<std::string, std::string>> samples = {
+                {"add(a,b)",   "int add(int a, int b) { return a + b; }"},
+                {"sum(x,y)",   "int sum(int x, int y) { return x + y; }"},
+                {"printHello", "void printHello() { std::cout << \"hello\"; }"}
+            };
+
+            std::vector<std::vector<float>> embeddings;
+            try {
+                for (const auto& s : samples) {
+                    std::cout << "\nEmbedding \"" << s.first << "\": " << s.second << "\n";
+                    embeddings.push_back(embedText(modelPath, tokenizerPath, s.second));
+                }
+            } catch (const Ort::Exception& e) {
+                std::cerr << "ONNX Runtime error: " << e.what() << "\n";
+                return 1;
+            }
+
+            std::cout << "\nPairwise cosine similarity:\n";
+            for (size_t a = 0; a < samples.size(); a++) {
+                for (size_t b = a + 1; b < samples.size(); b++) {
+                    double sim = cosineSimilarity(embeddings[a], embeddings[b]);
+                    std::cout << "  " << samples[a].first << " vs " << samples[b].first
+                              << ": " << sim << "%\n";
+                }
             }
             return 0;
         }

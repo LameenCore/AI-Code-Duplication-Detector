@@ -21,6 +21,9 @@ add_executable(detector
     src/gitscanner.cpp
     src/config.cpp
     src/embedder.cpp
+    src/json_parser.cpp
+    src/tokenizer.cpp
+    src/similarity.cpp
 )
 
 target_link_libraries(detector
