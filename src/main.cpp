@@ -18,6 +18,7 @@
 #include <sstream>
 #include <filesystem>
 #include <set>
+#include <cmath>
 
 namespace fs = std::filesystem;
 
@@ -35,7 +36,8 @@ void printUsage() {
     std::cout << "  --config <file>     Load default settings from a key=value config file\n";
     std::cout << "  --model <onnx>      CodeBERT ONNX model -- enables semantic duplicate detection\n";
     std::cout << "  --tokenizer <json>  tokenizer.json to go with --model\n";
-    std::cout << "  --semantic-threshold <num>   Cosine similarity % to flag as a semantic duplicate (default: 97)\n";
+    std::cout << "  --semantic-zscore <num>      Flag pairs more than this many standard deviations\n";
+    std::cout << "                               above the codebase's own mean similarity (default: 2.5)\n";
     std::cout << "  --onnx-test         Smoke-test the ONNX Runtime setup (prints version)\n";
     std::cout << "  --embed-test <onnx> Run CodeBERT inference on a fixed test sentence\n";
     std::cout << "  --tokenize-test <tokenizer.json>   Encode a fixed test sentence, print ids\n";
@@ -60,7 +62,7 @@ int main(int argc, char* argv[]) {
     bool gitOnly = false;
     std::string modelPath = "";
     std::string tokenizerPath = "";
-    double semanticThreshold = 97.0;
+    double semanticZScore = 2.5;
 
     if (argc == 1) {
         printUsage();
@@ -131,11 +133,11 @@ int main(int argc, char* argv[]) {
             tokenizerPath = argv[i + 1];
             i++;
         }
-        else if (arg == "--semantic-threshold" && i + 1 < argc) {
+        else if (arg == "--semantic-zscore" && i + 1 < argc) {
             try {
-                semanticThreshold = std::stod(argv[i + 1]);
+                semanticZScore = std::stod(argv[i + 1]);
             } catch (...) {
-                std::cerr << "Error: invalid semantic-threshold value\n";
+                std::cerr << "Error: invalid semantic-zscore value\n";
                 return 1;
             }
             i++;
@@ -355,24 +357,59 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            std::vector<DuplicatePair> semanticDuplicates;
-            for (size_t a = 0; a < functions.size(); a++) {
-                for (size_t b = a + 1; b < functions.size(); b++) {
-                    double sim = cosineSimilarity(embeddings[a], embeddings[b]);
-                    if (sim >= semanticThreshold) {
-                        semanticDuplicates.push_back({functions[a], functions[b], sim});
-                    }
+            // Day 24 showed that a fixed cosine-similarity cutoff is
+            // useless here: CodeBERT's pooled embeddings are anisotropic,
+            // so nearly every pair in a codebase of short, simple
+            // functions sits above 99% regardless of actual logic. Fix:
+            // compute every pairwise similarity first, then flag only the
+            // pairs that are statistical OUTLIERS relative to this
+            // codebase's own distribution (z-score), instead of comparing
+            // each pair to one global magic number.
+            size_t n = functions.size();
+            std::vector<double> allSims;
+            std::vector<std::pair<size_t, size_t>> allPairs;
+            allSims.reserve(n * (n - 1) / 2);
+            allPairs.reserve(n * (n - 1) / 2);
+
+            for (size_t a = 0; a < n; a++) {
+                for (size_t b = a + 1; b < n; b++) {
+                    allSims.push_back(cosineSimilarity(embeddings[a], embeddings[b]));
+                    allPairs.push_back({a, b});
                 }
             }
 
-            std::cout << "\n=== Semantic Duplicates (threshold " << semanticThreshold << "%) ===\n";
+            double mean = 0.0;
+            for (double s : allSims) mean += s;
+            if (!allSims.empty()) mean /= allSims.size();
+
+            double variance = 0.0;
+            for (double s : allSims) variance += (s - mean) * (s - mean);
+            if (!allSims.empty()) variance /= allSims.size();
+            double stddev = std::sqrt(variance);
+
+            std::cout << "\nSemantic similarity stats: mean=" << mean
+                      << "%  stddev=" << stddev << "\n";
+
+            std::vector<DuplicatePair> semanticDuplicates;
+            std::vector<double> semanticZ;
+            for (size_t k = 0; k < allSims.size(); k++) {
+                double z = (stddev > 0.0) ? (allSims[k] - mean) / stddev : 0.0;
+                if (z >= semanticZScore) {
+                    size_t a = allPairs[k].first, b = allPairs[k].second;
+                    semanticDuplicates.push_back({functions[a], functions[b], allSims[k]});
+                    semanticZ.push_back(z);
+                }
+            }
+
+            std::cout << "\n=== Semantic Duplicates (z >= " << semanticZScore << ") ===\n";
             if (semanticDuplicates.empty()) {
                 std::cout << "None found.\n";
             } else {
-                for (const auto& d : semanticDuplicates) {
+                for (size_t k = 0; k < semanticDuplicates.size(); k++) {
+                    const auto& d = semanticDuplicates[k];
                     std::cout << d.func1.name << " (" << d.func1.filename << ") <-> "
                               << d.func2.name << " (" << d.func2.filename << "): "
-                              << d.similarity << "%\n";
+                              << d.similarity << "% (z=" << semanticZ[k] << ")\n";
                 }
             }
             std::cout << "\n";
