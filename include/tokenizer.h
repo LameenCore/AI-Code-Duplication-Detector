@@ -28,7 +28,10 @@ public:
     bool load(const std::string& tokenizerJsonPath);
 
     // Turns text into CodeBERT input ids, including the <s>/</s> wrapper.
-    std::vector<int64_t> encode(const std::string& text) const;
+    // maxLength caps the TOTAL length (including <s>/</s>) -- CodeBERT's
+    // position-embedding table only has 512 valid slots, so anything
+    // longer gets truncated rather than crashing ONNX Runtime.
+    std::vector<int64_t> encode(const std::string& text, size_t maxLength = 512) const;
 
 private:
     std::string byteEncoder[256];

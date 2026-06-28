@@ -33,6 +33,9 @@ void printUsage() {
     std::cout << "  --ignore <dir>      Folder to ignore (can be used multiple times)\n";
     std::cout << "  --git-only          Only scan files tracked by git (skips ignored/build files)\n";
     std::cout << "  --config <file>     Load default settings from a key=value config file\n";
+    std::cout << "  --model <onnx>      CodeBERT ONNX model -- enables semantic duplicate detection\n";
+    std::cout << "  --tokenizer <json>  tokenizer.json to go with --model\n";
+    std::cout << "  --semantic-threshold <num>   Cosine similarity % to flag as a semantic duplicate (default: 97)\n";
     std::cout << "  --onnx-test         Smoke-test the ONNX Runtime setup (prints version)\n";
     std::cout << "  --embed-test <onnx> Run CodeBERT inference on a fixed test sentence\n";
     std::cout << "  --tokenize-test <tokenizer.json>   Encode a fixed test sentence, print ids\n";
@@ -55,6 +58,9 @@ int main(int argc, char* argv[]) {
     std::string jsonOutputFile = "";
     std::vector<std::string> ignorePaths;
     bool gitOnly = false;
+    std::string modelPath = "";
+    std::string tokenizerPath = "";
+    double semanticThreshold = 97.0;
 
     if (argc == 1) {
         printUsage();
@@ -116,6 +122,23 @@ int main(int argc, char* argv[]) {
         }
         else if (arg == "--git-only") {
             gitOnly = true;
+        }
+        else if (arg == "--model" && i + 1 < argc) {
+            modelPath = argv[i + 1];
+            i++;
+        }
+        else if (arg == "--tokenizer" && i + 1 < argc) {
+            tokenizerPath = argv[i + 1];
+            i++;
+        }
+        else if (arg == "--semantic-threshold" && i + 1 < argc) {
+            try {
+                semanticThreshold = std::stod(argv[i + 1]);
+            } catch (...) {
+                std::cerr << "Error: invalid semantic-threshold value\n";
+                return 1;
+            }
+            i++;
         }
         else if (arg == "--config" && i + 1 < argc) {
             i++; // already handled in the pre-pass above
@@ -199,11 +222,18 @@ int main(int argc, char* argv[]) {
                 {"printHello", "void printHello() { std::cout << \"hello\"; }"}
             };
 
+            // One Embedder, loaded once, reused for all three snippets --
+            // unlike embedText() (used by the standalone --embed flag),
+            // this doesn't reopen the ~500MB model each time.
             std::vector<std::vector<float>> embeddings;
             try {
+                Embedder embedder;
+                if (!embedder.load(modelPath, tokenizerPath)) {
+                    return 1;
+                }
                 for (const auto& s : samples) {
                     std::cout << "\nEmbedding \"" << s.first << "\": " << s.second << "\n";
-                    embeddings.push_back(embedText(modelPath, tokenizerPath, s.second));
+                    embeddings.push_back(embedder.embed(s.second));
                 }
             } catch (const Ort::Exception& e) {
                 std::cerr << "ONNX Runtime error: " << e.what() << "\n";
@@ -300,9 +330,54 @@ int main(int argc, char* argv[]) {
     std::vector<Function> functions = extractFunctionsWithClangMulti(files);
     std::cout << "Extracted " << functions.size() << " function(s).\n\n";
 
-    // Step 4: Detect
+    // Step 4: Detect (token-based -- catches copy-pasted/lightly-edited code)
     std::cout << "Analyzing for duplicates...\n\n";
     std::vector<DuplicatePair> duplicates = detectDuplicates(functions, threshold);
+
+    // Step 4b: Semantic detection (CodeBERT embeddings) -- catches code
+    // that was rewritten with different names/structure but means the
+    // same thing, which the token-based pass above can't see at all.
+    // Opt-in: only runs if both --model and --tokenizer were given, since
+    // the model files are large and not part of the repo.
+    if (!modelPath.empty() && !tokenizerPath.empty()) {
+        std::cout << "Computing semantic embeddings for " << functions.size() << " function(s)...\n";
+
+        Embedder embedder;
+        if (!embedder.load(modelPath, tokenizerPath)) {
+            std::cerr << "Warning: could not load embedder, skipping semantic detection.\n";
+        } else {
+            std::vector<std::vector<float>> embeddings;
+            embeddings.reserve(functions.size());
+            for (size_t fi = 0; fi < functions.size(); fi++) {
+                embeddings.push_back(embedder.embed(functions[fi].body));
+                if ((fi + 1) % 5 == 0 || fi + 1 == functions.size()) {
+                    std::cout << "  embedded " << (fi + 1) << "/" << functions.size() << "\n";
+                }
+            }
+
+            std::vector<DuplicatePair> semanticDuplicates;
+            for (size_t a = 0; a < functions.size(); a++) {
+                for (size_t b = a + 1; b < functions.size(); b++) {
+                    double sim = cosineSimilarity(embeddings[a], embeddings[b]);
+                    if (sim >= semanticThreshold) {
+                        semanticDuplicates.push_back({functions[a], functions[b], sim});
+                    }
+                }
+            }
+
+            std::cout << "\n=== Semantic Duplicates (threshold " << semanticThreshold << "%) ===\n";
+            if (semanticDuplicates.empty()) {
+                std::cout << "None found.\n";
+            } else {
+                for (const auto& d : semanticDuplicates) {
+                    std::cout << d.func1.name << " (" << d.func1.filename << ") <-> "
+                              << d.func2.name << " (" << d.func2.filename << "): "
+                              << d.similarity << "%\n";
+                }
+            }
+            std::cout << "\n";
+        }
+    }
 
     // Step 5: Print to terminal
     writeReport(std::cout, duplicates, functions, path);

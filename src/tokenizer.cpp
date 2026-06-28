@@ -229,19 +229,31 @@ bool Tokenizer::load(const std::string& path) {
     return true;
 }
 
-std::vector<int64_t> Tokenizer::encode(const std::string& text) const {
-    std::vector<int64_t> ids;
-    ids.push_back(0); // <s>
+std::vector<int64_t> Tokenizer::encode(const std::string& text, size_t maxLength) const {
+    std::vector<int64_t> bodyIds;
 
     for (const auto& word : preTokenize(text)) {
         std::vector<std::string> symbols = mapToByteSymbols(word);
         std::vector<std::string> pieces = bpeMerge(std::move(symbols));
         for (const auto& piece : pieces) {
             auto it = vocab.find(piece);
-            ids.push_back(it != vocab.end() ? it->second : unkId);
+            bodyIds.push_back(it != vocab.end() ? it->second : unkId);
         }
     }
 
+    // Truncate so <s> + body + </s> never exceeds maxLength. Without this,
+    // a long function body produces a position id past CodeBERT's 512-slot
+    // position-embedding table and ONNX Runtime throws an out-of-bounds
+    // Gather error instead of a clean result.
+    size_t maxBody = (maxLength > 2) ? maxLength - 2 : 0;
+    if (bodyIds.size() > maxBody) {
+        bodyIds.resize(maxBody);
+    }
+
+    std::vector<int64_t> ids;
+    ids.reserve(bodyIds.size() + 2);
+    ids.push_back(0); // <s>
+    ids.insert(ids.end(), bodyIds.begin(), bodyIds.end());
     ids.push_back(2); // </s>
     return ids;
 }

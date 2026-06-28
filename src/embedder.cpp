@@ -1,27 +1,14 @@
 #include "embedder.h"
-#include "tokenizer.h"
-#include "onnxruntime_cxx_api.h"
 #include <iostream>
 #include <array>
 #include <algorithm>
 
 namespace {
 
-// Shared by both embedTest and embedText: takes ids that have already been
-// produced (one way or another), runs them through the ONNX session, and
-// prints/returns the pooled embedding.
-std::vector<float> runInference(const std::string& modelPath, const std::vector<int64_t>& inputIds) {
+// Runs one already-tokenized sequence through an already-open session.
+// Shared by Embedder::embed(), embedTest(), and embedText().
+std::vector<float> runInference(Ort::Session& session, const std::vector<int64_t>& inputIds) {
     std::vector<int64_t> attentionMask(inputIds.size(), 1);
-
-    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "embed");
-    Ort::SessionOptions sessionOptions;
-
-#ifdef _WIN32
-    std::wstring wModelPath(modelPath.begin(), modelPath.end());
-    Ort::Session session(env, wModelPath.c_str(), sessionOptions);
-#else
-    Ort::Session session(env, modelPath.c_str(), sessionOptions);
-#endif
 
     std::array<int64_t, 2> shape = {1, (int64_t)inputIds.size()};
     Ort::MemoryInfo memoryInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
@@ -50,25 +37,39 @@ std::vector<float> runInference(const std::string& modelPath, const std::vector<
     size_t total = 1;
     for (auto d : outShape) total *= (size_t)d;
 
-    std::vector<float> embedding(outData, outData + total);
+    return std::vector<float>(outData, outData + total);
+}
 
-    std::cout << "Output shape: [";
-    for (size_t i = 0; i < outShape.size(); i++) {
-        std::cout << outShape[i];
-        if (i + 1 < outShape.size()) std::cout << ", ";
-    }
-    std::cout << "]\n";
-
-    std::cout << "First 10 values of the embedding: ";
-    for (size_t i = 0; i < std::min((size_t)10, embedding.size()); i++) {
-        std::cout << embedding[i] << " ";
-    }
-    std::cout << "\n";
-
-    return embedding;
+// ONNX Runtime's C++ API wants a wide-char path on Windows.
+Ort::Session openSession(Ort::Env& env, const std::string& modelPath) {
+    Ort::SessionOptions sessionOptions;
+#ifdef _WIN32
+    std::wstring wModelPath(modelPath.begin(), modelPath.end());
+    return Ort::Session(env, wModelPath.c_str(), sessionOptions);
+#else
+    return Ort::Session(env, modelPath.c_str(), sessionOptions);
+#endif
 }
 
 } // namespace
+
+bool Embedder::load(const std::string& modelPath, const std::string& tokenizerPath) {
+    if (!tokenizer.load(tokenizerPath)) {
+        return false;
+    }
+    try {
+        session = std::make_unique<Ort::Session>(openSession(env, modelPath));
+    } catch (const Ort::Exception& e) {
+        std::cerr << "Embedder: failed to load model " << modelPath << ": " << e.what() << "\n";
+        return false;
+    }
+    return true;
+}
+
+std::vector<float> Embedder::embed(const std::string& text) const {
+    if (!session) return {};
+    return runInference(*session, tokenizer.encode(text));
+}
 
 std::vector<float> embedTest(const std::string& modelPath) {
     // Hardcoded input_ids for the test sentence:
@@ -80,26 +81,47 @@ std::vector<float> embedTest(const std::string& modelPath) {
         0, 2544, 1606, 1640, 2544, 10, 6, 6979, 741, 43,
         25522, 671, 10, 2055, 741, 131, 35524, 2
     };
-    return runInference(modelPath, inputIds);
+
+    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "embed-test");
+    Ort::Session session = openSession(env, modelPath);
+    std::vector<float> embedding = runInference(session, inputIds);
+
+    std::cout << "Output shape: [1, " << embedding.size() << "]\n";
+    std::cout << "First 10 values of the embedding: ";
+    for (size_t i = 0; i < std::min((size_t)10, embedding.size()); i++) {
+        std::cout << embedding[i] << " ";
+    }
+    std::cout << "\n";
+
+    return embedding;
 }
 
 std::vector<float> embedText(const std::string& modelPath,
                               const std::string& tokenizerPath,
                               const std::string& text) {
-    Tokenizer tok;
-    if (!tok.load(tokenizerPath)) {
-        std::cerr << "Failed to load tokenizer from " << tokenizerPath << "\n";
+    Embedder embedder;
+    if (!embedder.load(modelPath, tokenizerPath)) {
+        std::cerr << "Failed to load embedder (model=" << modelPath
+                  << ", tokenizer=" << tokenizerPath << ")\n";
         return {};
     }
 
-    std::vector<int64_t> inputIds = tok.encode(text);
-
-    std::cout << "Tokenized into " << inputIds.size() << " ids: [";
-    for (size_t i = 0; i < inputIds.size(); i++) {
-        std::cout << inputIds[i];
-        if (i + 1 < inputIds.size()) std::cout << ", ";
+    std::vector<int64_t> ids = embedder.tokenize(text);
+    std::cout << "Tokenized into " << ids.size() << " ids: [";
+    for (size_t i = 0; i < ids.size(); i++) {
+        std::cout << ids[i];
+        if (i + 1 < ids.size()) std::cout << ", ";
     }
     std::cout << "]\n";
 
-    return runInference(modelPath, inputIds);
+    std::vector<float> embedding = embedder.embed(text);
+
+    std::cout << "Output shape: [1, " << embedding.size() << "]\n";
+    std::cout << "First 10 values of the embedding: ";
+    for (size_t i = 0; i < std::min((size_t)10, embedding.size()); i++) {
+        std::cout << embedding[i] << " ";
+    }
+    std::cout << "\n";
+
+    return embedding;
 }
