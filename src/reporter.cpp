@@ -32,6 +32,34 @@ std::string getCurrentTime() {
     return std::string(buf);
 }
 
+// Rolls duplication rate + semantic outlier count into one 0-100 number.
+// Starts at a perfect 100 and subtracts a penalty for each signal:
+//   - token-based duplication rate is subtracted directly (a codebase that's
+//     40% duplicated loses 40 points)
+//   - each semantic outlier costs a flat 5 points (semantic hits are rarer
+//     and more deliberate than token matches, so they're weighted heavier
+//     per-incident even though there are usually fewer of them)
+// Clamped to [0, 100] so it always reads as a sane percentage.
+double computeHealthScore(double duplicationRate, size_t semanticCount, bool semanticEnabled) {
+    double score = 100.0 - duplicationRate;
+    if (semanticEnabled) {
+        score -= static_cast<double>(semanticCount) * 5.0;
+    }
+    if (score < 0.0) score = 0.0;
+    if (score > 100.0) score = 100.0;
+    return score;
+}
+
+// Converts the numeric score into a school-style letter grade so the
+// headline number is easy to skim without doing mental math.
+std::string healthGrade(double score) {
+    if (score >= 90.0) return "A";
+    if (score >= 75.0) return "B";
+    if (score >= 60.0) return "C";
+    if (score >= 40.0) return "D";
+    return "F";
+}
+
 void writeReport(std::ostream& out,
                  const std::vector<DuplicatePair>& duplicates,
                  const std::vector<Function>& functions,
@@ -52,14 +80,19 @@ void writeReport(std::ostream& out,
     out << "  Total functions scanned    : " << functions.size() << "\n";
     out << "  Duplicate pairs found      : " << duplicates.size() << "\n";
 
+    double duplicationRate = 0.0;
     if (!functions.empty()) {
-        double duplicationRate = (double)(duplicates.size() * 2) / functions.size() * 100.0;
+        duplicationRate = (double)(duplicates.size() * 2) / functions.size() * 100.0;
         out << std::fixed << std::setprecision(1);
         out << "  Duplication rate           : " << duplicationRate << "%\n";
     }
     if (semanticEnabled) {
         out << "  Semantic duplicates found  : " << semanticDuplicates.size() << "\n";
     }
+
+    double healthScore = computeHealthScore(duplicationRate, semanticDuplicates.size(), semanticEnabled);
+    out << std::fixed << std::setprecision(1);
+    out << "  Codebase health score      : " << healthScore << "/100 (" << healthGrade(healthScore) << ")\n";
 
     out << "\n";
 
@@ -161,6 +194,13 @@ void writeHtmlReport(const std::string& filename,
     file << ".low { color: #6bff84; font-weight: bold; }\n";
     file << "</style>\n</head>\n<body>\n";
 
+    double duplicationRate = 0.0;
+    if (!functions.empty()) {
+        duplicationRate = (double)(duplicates.size() * 2) / functions.size() * 100.0;
+    }
+    double healthScore = computeHealthScore(duplicationRate, semanticDuplicates.size(), semanticEnabled);
+
+    file << std::fixed << std::setprecision(1);
     file << "<h1>Code Duplication Report</h1>\n";
     file << "<div class=\"meta\">Scanned path: " << scannedPath << "<br>";
     file << "Generated: " << getCurrentTime() << "<br>";
@@ -169,6 +209,7 @@ void writeHtmlReport(const std::string& filename,
     if (semanticEnabled) {
         file << "<br>Semantic duplicates found: " << semanticDuplicates.size();
     }
+    file << "<br><strong>Health score: " << healthScore << "/100 (" << healthGrade(healthScore) << ")</strong>";
     file << "</div>\n";
 
     file << "<h2>Token-Based Duplicates</h2>\n";
@@ -235,6 +276,7 @@ void writeJsonReport(const std::string& filename,
     if (!functions.empty()) {
         duplicationRate = (double)(duplicates.size() * 2) / functions.size() * 100.0;
     }
+    double healthScore = computeHealthScore(duplicationRate, semanticDuplicates.size(), semanticEnabled);
 
     file << std::fixed << std::setprecision(1);
 
@@ -244,6 +286,8 @@ void writeJsonReport(const std::string& filename,
     file << "  \"totalFunctions\": " << functions.size() << ",\n";
     file << "  \"duplicatesFound\": " << duplicates.size() << ",\n";
     file << "  \"duplicationRate\": " << duplicationRate << ",\n";
+    file << "  \"healthScore\": " << healthScore << ",\n";
+    file << "  \"healthGrade\": \"" << healthGrade(healthScore) << "\",\n";
     file << "  \"duplicates\": [\n";
 
     for (size_t i = 0; i < duplicates.size(); i++) {

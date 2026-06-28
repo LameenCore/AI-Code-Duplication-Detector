@@ -1,9 +1,11 @@
 {
   "scannedPath": "..\\src",
-  "generated": "2026-06-28 12:14:12",
-  "totalFunctions": 42,
+  "generated": "2026-06-28 18:07:44",
+  "totalFunctions": 44,
   "duplicatesFound": 4,
-  "duplicationRate": 19.0,
+  "duplicationRate": 18.2,
+  "healthScore": 81.8,
+  "healthGrade": "B",
   "duplicates": [
     {
       "similarity": 100.0,
