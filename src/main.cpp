@@ -336,6 +336,12 @@ int main(int argc, char* argv[]) {
     std::cout << "Analyzing for duplicates...\n\n";
     std::vector<DuplicatePair> duplicates = detectDuplicates(functions, threshold);
 
+    // Declared out here (not inside the if-block below) so Steps 5-8 can
+    // still see them even when --model/--tokenizer weren't given --
+    // semanticEnabled just stays false and semanticDuplicates stays empty.
+    std::vector<DuplicatePair> semanticDuplicates;
+    bool semanticEnabled = false;
+
     // Step 4b: Semantic detection (CodeBERT embeddings) -- catches code
     // that was rewritten with different names/structure but means the
     // same thing, which the token-based pass above can't see at all.
@@ -390,26 +396,23 @@ int main(int argc, char* argv[]) {
             std::cout << "\nSemantic similarity stats: mean=" << mean
                       << "%  stddev=" << stddev << "\n";
 
-            std::vector<DuplicatePair> semanticDuplicates;
-            std::vector<double> semanticZ;
             for (size_t k = 0; k < allSims.size(); k++) {
                 double z = (stddev > 0.0) ? (allSims[k] - mean) / stddev : 0.0;
                 if (z >= semanticZScore) {
                     size_t a = allPairs[k].first, b = allPairs[k].second;
-                    semanticDuplicates.push_back({functions[a], functions[b], allSims[k]});
-                    semanticZ.push_back(z);
+                    semanticDuplicates.push_back({functions[a], functions[b], allSims[k], z});
                 }
             }
+            semanticEnabled = true;
 
             std::cout << "\n=== Semantic Duplicates (z >= " << semanticZScore << ") ===\n";
             if (semanticDuplicates.empty()) {
                 std::cout << "None found.\n";
             } else {
-                for (size_t k = 0; k < semanticDuplicates.size(); k++) {
-                    const auto& d = semanticDuplicates[k];
+                for (const auto& d : semanticDuplicates) {
                     std::cout << d.func1.name << " (" << d.func1.filename << ") <-> "
                               << d.func2.name << " (" << d.func2.filename << "): "
-                              << d.similarity << "% (z=" << semanticZ[k] << ")\n";
+                              << d.similarity << "% (z=" << d.zscore << ")\n";
                 }
             }
             std::cout << "\n";
@@ -417,19 +420,19 @@ int main(int argc, char* argv[]) {
     }
 
     // Step 5: Print to terminal
-    writeReport(std::cout, duplicates, functions, path);
+    writeReport(std::cout, duplicates, functions, path, semanticDuplicates, semanticEnabled);
 
     // Step 6: Save to file
-    saveReportToFile(outputFile, duplicates, functions, path);
+    saveReportToFile(outputFile, duplicates, functions, path, semanticDuplicates, semanticEnabled);
 
     // Step 7: Save HTML report if requested
     if (!htmlOutputFile.empty()) {
-        writeHtmlReport(htmlOutputFile, duplicates, functions, path);
+        writeHtmlReport(htmlOutputFile, duplicates, functions, path, semanticDuplicates, semanticEnabled);
     }
 
     // Step 8: Save JSON report if requested
     if (!jsonOutputFile.empty()) {
-        writeJsonReport(jsonOutputFile, duplicates, functions, path);
+        writeJsonReport(jsonOutputFile, duplicates, functions, path, semanticDuplicates, semanticEnabled);
     }
 
     return 0;
