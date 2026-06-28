@@ -1,4 +1,5 @@
 #include "reporter.h"
+#include "suggestion.h"
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -77,6 +78,7 @@ void writeReport(std::ostream& out,
             out << "  Func 1 : " << pair.func1.name << "\n";
             out << "  File 2 : " << pair.func2.filename << "\n";
             out << "  Func 2 : " << pair.func2.name << "\n";
+            out << "  Suggestion : " << buildSuggestion(pair, false) << "\n";
             out << std::string(60, '-') << "\n\n";
         }
     }
@@ -100,6 +102,7 @@ void writeReport(std::ostream& out,
                 out << "  Func 1 : " << pair.func1.name << "\n";
                 out << "  File 2 : " << pair.func2.filename << "\n";
                 out << "  Func 2 : " << pair.func2.name << "\n";
+                out << "  Suggestion : " << buildSuggestion(pair, true) << "\n";
                 out << std::string(60, '-') << "\n\n";
             }
         }
@@ -169,7 +172,7 @@ void writeHtmlReport(const std::string& filename,
     file << "</div>\n";
 
     file << "<h2>Token-Based Duplicates</h2>\n";
-    file << "<table>\n<tr><th>Function 1</th><th>File 1</th><th>Function 2</th><th>File 2</th><th>Similarity</th></tr>\n";
+    file << "<table>\n<tr><th>Function 1</th><th>File 1</th><th>Function 2</th><th>File 2</th><th>Similarity</th><th>Suggestion</th></tr>\n";
 
     for (const auto& pair : duplicates) {
         std::string cssClass = pair.similarity >= 95.0 ? "high" :
@@ -181,6 +184,7 @@ void writeHtmlReport(const std::string& filename,
         file << "<td>" << pair.func2.name << "</td>";
         file << "<td>" << pair.func2.filename << "</td>";
         file << "<td class=\"" << cssClass << "\">" << pair.similarity << "%</td>";
+        file << "<td>" << buildSuggestion(pair, false) << "</td>";
         file << "</tr>\n";
     }
 
@@ -191,7 +195,7 @@ void writeHtmlReport(const std::string& filename,
         if (semanticDuplicates.empty()) {
             file << "<p>No semantic duplicates found.</p>\n";
         } else {
-            file << "<table>\n<tr><th>Function 1</th><th>File 1</th><th>Function 2</th><th>File 2</th><th>Similarity</th><th>z-score</th></tr>\n";
+            file << "<table>\n<tr><th>Function 1</th><th>File 1</th><th>Function 2</th><th>File 2</th><th>Similarity</th><th>z-score</th><th>Suggestion</th></tr>\n";
             for (const auto& pair : semanticDuplicates) {
                 std::string cssClass = pair.similarity >= 95.0 ? "high" :
                                         pair.similarity >= 85.0 ? "medium" : "low";
@@ -202,6 +206,7 @@ void writeHtmlReport(const std::string& filename,
                 file << "<td>" << pair.func2.filename << "</td>";
                 file << "<td class=\"" << cssClass << "\">" << pair.similarity << "%</td>";
                 file << "<td>" << pair.zscore << "</td>";
+                file << "<td>" << buildSuggestion(pair, true) << "</td>";
                 file << "</tr>\n";
             }
             file << "</table>\n";
@@ -248,7 +253,8 @@ void writeJsonReport(const std::string& filename,
         file << "      \"function1\": \"" << escapeJson(pair.func1.name) << "\",\n";
         file << "      \"file1\": \"" << escapeJson(pair.func1.filename) << "\",\n";
         file << "      \"function2\": \"" << escapeJson(pair.func2.name) << "\",\n";
-        file << "      \"file2\": \"" << escapeJson(pair.func2.filename) << "\"\n";
+        file << "      \"file2\": \"" << escapeJson(pair.func2.filename) << "\",\n";
+        file << "      \"suggestion\": \"" << escapeJson(buildSuggestion(pair, false)) << "\"\n";
         file << "    }" << (i + 1 < duplicates.size() ? "," : "") << "\n";
     }
 
@@ -267,7 +273,8 @@ void writeJsonReport(const std::string& filename,
             file << "      \"function1\": \"" << escapeJson(pair.func1.name) << "\",\n";
             file << "      \"file1\": \"" << escapeJson(pair.func1.filename) << "\",\n";
             file << "      \"function2\": \"" << escapeJson(pair.func2.name) << "\",\n";
-            file << "      \"file2\": \"" << escapeJson(pair.func2.filename) << "\"\n";
+            file << "      \"file2\": \"" << escapeJson(pair.func2.filename) << "\",\n";
+            file << "      \"suggestion\": \"" << escapeJson(buildSuggestion(pair, true)) << "\"\n";
             file << "    }" << (i + 1 < semanticDuplicates.size() ? "," : "") << "\n";
         }
         file << "  ]\n";

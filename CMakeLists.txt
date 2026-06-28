@@ -24,6 +24,7 @@ add_executable(detector
     src/json_parser.cpp
     src/tokenizer.cpp
     src/similarity.cpp
+    src/suggestion.cpp
 )
 
 target_link_libraries(detector
