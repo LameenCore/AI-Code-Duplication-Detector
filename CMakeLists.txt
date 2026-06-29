@@ -45,3 +45,14 @@ add_custom_command(TARGET detector POST_BUILD
     "C:/onnxruntime-win-x64-1.26.0/lib/onnxruntime.dll"
     $<TARGET_FILE_DIR:detector>
 )
+
+# Separate test executable. Only links the "pure logic" source files
+# (normalizer, similarity, suggestion, reporter) -- none of these touch
+# libclang or onnxruntime, so this target builds fast and needs no DLLs.
+add_executable(tests
+    tests/test_main.cpp
+    src/normalizer.cpp
+    src/similarity.cpp
+    src/suggestion.cpp
+    src/reporter.cpp
+)
