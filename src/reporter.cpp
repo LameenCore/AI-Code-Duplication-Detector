@@ -4,6 +4,37 @@
 #include <iomanip>
 #include <iostream>
 #include <ctime>
+#include <sstream>
+
+namespace {
+// ANSI escape codes: "\033[<code>m" tells the terminal to switch color
+// until it sees the reset code. Windows 10+ terminals (including modern
+// PowerShell) understand these natively -- no library needed.
+const char* ANSI_RED    = "\033[91m";
+const char* ANSI_YELLOW = "\033[93m";
+const char* ANSI_GREEN  = "\033[92m";
+const char* ANSI_RESET  = "\033[0m";
+
+// Wraps text in a color code, but only if useColor is true -- this is what
+// keeps the exact same escape codes out of report.txt while still using
+// them for the std::cout printout.
+std::string colorize(const std::string& text, const char* color, bool useColor) {
+    if (!useColor) return text;
+    return std::string(color) + text + ANSI_RESET;
+}
+
+const char* similarityColor(double similarity) {
+    if (similarity >= 95.0) return ANSI_RED;
+    if (similarity >= 85.0) return ANSI_YELLOW;
+    return ANSI_GREEN;
+}
+
+const char* gradeColor(const std::string& grade) {
+    if (grade == "A" || grade == "B") return ANSI_GREEN;
+    if (grade == "C") return ANSI_YELLOW;
+    return ANSI_RED;
+}
+} // namespace
 
 // Escapes characters that would otherwise break JSON string syntax
 // (" and \), plus control characters like newlines and tabs.
@@ -65,7 +96,8 @@ void writeReport(std::ostream& out,
                  const std::vector<Function>& functions,
                  const std::string& scannedPath,
                  const std::vector<DuplicatePair>& semanticDuplicates,
-                 bool semanticEnabled) {
+                 bool semanticEnabled,
+                 bool useColor) {
 
     std::string line(60, '=');
 
@@ -91,8 +123,11 @@ void writeReport(std::ostream& out,
     }
 
     double healthScore = computeHealthScore(duplicationRate, semanticDuplicates.size(), semanticEnabled);
+    std::string grade = healthGrade(healthScore);
+    std::ostringstream healthLine;
+    healthLine << std::fixed << std::setprecision(1) << healthScore << "/100 (" << grade << ")";
     out << std::fixed << std::setprecision(1);
-    out << "  Codebase health score      : " << healthScore << "/100 (" << healthGrade(healthScore) << ")\n";
+    out << "  Codebase health score      : " << colorize(healthLine.str(), gradeColor(grade), useColor) << "\n";
 
     out << "\n";
 
@@ -104,9 +139,10 @@ void writeReport(std::ostream& out,
     } else {
         int count = 1;
         for (const auto& pair : duplicates) {
+            std::ostringstream simText;
+            simText << std::fixed << std::setprecision(1) << pair.similarity << "% similarity";
             out << "[#" << count++ << "] ";
-            out << std::fixed << std::setprecision(1);
-            out << pair.similarity << "% similarity\n";
+            out << colorize(simText.str(), similarityColor(pair.similarity), useColor) << "\n";
             out << "  File 1 : " << pair.func1.filename << "\n";
             out << "  Func 1 : " << pair.func1.name << "\n";
             out << "  File 2 : " << pair.func2.filename << "\n";
@@ -128,9 +164,11 @@ void writeReport(std::ostream& out,
         } else {
             int count = 1;
             for (const auto& pair : semanticDuplicates) {
+                std::ostringstream simText;
+                simText << std::fixed << std::setprecision(1) << pair.similarity
+                        << "% similarity (z=" << pair.zscore << ")";
                 out << "[#" << count++ << "] ";
-                out << std::fixed << std::setprecision(1);
-                out << pair.similarity << "% similarity (z=" << pair.zscore << ")\n";
+                out << colorize(simText.str(), similarityColor(pair.similarity), useColor) << "\n";
                 out << "  File 1 : " << pair.func1.filename << "\n";
                 out << "  Func 1 : " << pair.func1.name << "\n";
                 out << "  File 2 : " << pair.func2.filename << "\n";
@@ -192,6 +230,11 @@ void writeHtmlReport(const std::string& filename,
     file << ".high { color: #ff6b6b; font-weight: bold; }\n";
     file << ".medium { color: #ffd93d; font-weight: bold; }\n";
     file << ".low { color: #6bff84; font-weight: bold; }\n";
+    file << ".grade-good { color: #6bff84; }\n";
+    file << ".grade-ok { color: #ffd93d; }\n";
+    file << ".grade-bad { color: #ff6b6b; }\n";
+    file << ".health-badge { display: inline-block; padding: 4px 12px; border-radius: 6px; "
+            "background: #2a2a2a; font-weight: bold; font-size: 1.1em; }\n";
     file << "</style>\n</head>\n<body>\n";
 
     double duplicationRate = 0.0;
@@ -199,6 +242,9 @@ void writeHtmlReport(const std::string& filename,
         duplicationRate = (double)(duplicates.size() * 2) / functions.size() * 100.0;
     }
     double healthScore = computeHealthScore(duplicationRate, semanticDuplicates.size(), semanticEnabled);
+    std::string grade = healthGrade(healthScore);
+    std::string gradeClass = (grade == "A" || grade == "B") ? "grade-good" :
+                              (grade == "C") ? "grade-ok" : "grade-bad";
 
     file << std::fixed << std::setprecision(1);
     file << "<h1>Code Duplication Report</h1>\n";
@@ -209,7 +255,8 @@ void writeHtmlReport(const std::string& filename,
     if (semanticEnabled) {
         file << "<br>Semantic duplicates found: " << semanticDuplicates.size();
     }
-    file << "<br><strong>Health score: " << healthScore << "/100 (" << healthGrade(healthScore) << ")</strong>";
+    file << "<br><br><span class=\"health-badge " << gradeClass << "\">Health score: "
+         << healthScore << "/100 (" << grade << ")</span>";
     file << "</div>\n";
 
     file << "<h2>Token-Based Duplicates</h2>\n";

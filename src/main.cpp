@@ -23,28 +23,43 @@
 namespace fs = std::filesystem;
 
 void printUsage() {
+    // \033[96m = bright cyan, \033[1m = bold, \033[0m = reset. Used here
+    // purely to make the section headers stand out when --help is read on
+    // a real terminal -- printUsage() always writes to std::cout, never to
+    // a file, so there's no risk of escape codes leaking into a report.
+    const char* HEADER = "\033[1m\033[96m";
+    const char* RESET = "\033[0m";
+
     std::cout << "\nUsage:\n";
     std::cout << "  detector.exe --path <directory> [options]\n\n";
-    std::cout << "Options:\n";
+
+    std::cout << HEADER << "Core options:" << RESET << "\n";
     std::cout << "  --path <dir>        Path to scan (required)\n";
     std::cout << "  --threshold <num>   Similarity threshold 0-100 (default: 80)\n";
-    std::cout << "  --output <file>     Output report filename (default: report.txt)\n";
-    std::cout << "  --html <file>       Save report as HTML\n";
-    std::cout << "  --json <file>       Save report as JSON\n";
     std::cout << "  --ignore <dir>      Folder to ignore (can be used multiple times)\n";
     std::cout << "  --git-only          Only scan files tracked by git (skips ignored/build files)\n";
     std::cout << "  --config <file>     Load default settings from a key=value config file\n";
+    std::cout << "  --help              Show this help message\n\n";
+
+    std::cout << HEADER << "Report output:" << RESET << "\n";
+    std::cout << "  --output <file>     Output report filename (default: report.txt)\n";
+    std::cout << "  --html <file>       Save report as HTML\n";
+    std::cout << "  --json <file>       Save report as JSON\n\n";
+
+    std::cout << HEADER << "Semantic detection (CodeBERT):" << RESET << "\n";
     std::cout << "  --model <onnx>      CodeBERT ONNX model -- enables semantic duplicate detection\n";
     std::cout << "  --tokenizer <json>  tokenizer.json to go with --model\n";
     std::cout << "  --semantic-zscore <num>      Flag pairs more than this many standard deviations\n";
-    std::cout << "                               above the codebase's own mean similarity (default: 2.5)\n";
+    std::cout << "                               above the codebase's own mean similarity (default: 2.5)\n\n";
+
+    std::cout << HEADER << "Testing / debug flags:" << RESET << "\n";
     std::cout << "  --onnx-test         Smoke-test the ONNX Runtime setup (prints version)\n";
     std::cout << "  --embed-test <onnx> Run CodeBERT inference on a fixed test sentence\n";
     std::cout << "  --tokenize-test <tokenizer.json>   Encode a fixed test sentence, print ids\n";
     std::cout << "  --embed <onnx> <tokenizer.json> <text>   Real text -> tokenizer -> embedding\n";
-    std::cout << "  --similarity-test <onnx> <tokenizer.json>   Embed 3 sample snippets, print pairwise cosine similarity\n";
-    std::cout << "  --help              Show this help message\n\n";
-    std::cout << "Examples:\n";
+    std::cout << "  --similarity-test <onnx> <tokenizer.json>   Embed 3 sample snippets, print pairwise cosine similarity\n\n";
+
+    std::cout << HEADER << "Examples:" << RESET << "\n";
     std::cout << "  detector.exe --path ../src\n";
     std::cout << "  detector.exe --path .. --ignore build --ignore vendor\n";
     std::cout << "  detector.exe --path .. --threshold 70 --output results.txt\n";
@@ -452,8 +467,10 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Step 5: Print to terminal
-    writeReport(std::cout, duplicates, functions, path, semanticDuplicates, semanticEnabled);
+    // Step 5: Print to terminal (useColor=true here only -- report.txt
+    // below stays plain text since color escape codes would just show up
+    // as garbage characters in a file)
+    writeReport(std::cout, duplicates, functions, path, semanticDuplicates, semanticEnabled, true);
 
     // Step 6: Save to file
     saveReportToFile(outputFile, duplicates, functions, path, semanticDuplicates, semanticEnabled);
