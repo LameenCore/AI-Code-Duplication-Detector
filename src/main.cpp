@@ -304,6 +304,18 @@ int main(int argc, char* argv[]) {
     // Step 1: Scan with ignore list
     std::vector<std::string> files = scanDirectory(path, ignorePaths);
 
+    // Bail out here instead of limping through an empty scan: with 0 files
+    // every downstream number (duplicates, health score) would read as a
+    // perfect, clean codebase, which is misleading -- it almost always
+    // means a bad --path, an --ignore that swallowed everything, or a
+    // folder with no .cpp/.h files at all.
+    if (files.empty()) {
+        std::cerr << "Error: no .cpp/.h files found at \"" << path
+                   << "\". Check that the path exists, is a directory, "
+                      "and isn't fully excluded by --ignore.\n";
+        return 1;
+    }
+
     // Step 1b: If --git-only was requested, narrow the list down to
     // only files git is actually tracking in this repo.
     if (gitOnly) {
@@ -323,6 +335,15 @@ int main(int argc, char* argv[]) {
             }
             files = filtered;
             std::cout << "Git-aware mode: " << files.size() << " of the scanned files are tracked by git.\n";
+
+            // Same reasoning as the earlier empty-files check: if --git-only
+            // filtered everything out (e.g. scanning outside a repo's
+            // tracked set), don't continue into a fake "clean" report.
+            if (files.empty()) {
+                std::cerr << "Error: --git-only left 0 files to scan. "
+                              "Nothing in \"" << path << "\" is tracked by git.\n";
+                return 1;
+            }
         }
     }
 
@@ -331,6 +352,18 @@ int main(int argc, char* argv[]) {
     // Step 2 & 3: Extract functions using libclang's real AST (replaces brace-counting)
     std::vector<Function> functions = extractFunctionsWithClangMulti(files);
     std::cout << "Extracted " << functions.size() << " function(s).\n\n";
+
+    // Files found but zero functions parsed out of them -- not necessarily
+    // wrong (a folder of pure declaration headers could legitimately have
+    // none), but the health score and duplicate counts below would read as
+    // a perfect score either way, so call out that it's not a sign of a
+    // clean codebase, just an empty analysis.
+    if (functions.empty()) {
+        std::cerr << "Warning: 0 functions extracted from " << files.size()
+                   << " file(s). The report below will look \"clean\" but "
+                      "that's because there was nothing to analyze -- not "
+                      "because the codebase has no duplicates.\n\n";
+    }
 
     // Step 4: Detect (token-based -- catches copy-pasted/lightly-edited code)
     std::cout << "Analyzing for duplicates...\n\n";

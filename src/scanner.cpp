@@ -22,17 +22,32 @@ std::vector<std::string> scanDirectory(const std::string& path,
         return files;
     }
 
-    for (const auto& entry : fs::recursive_directory_iterator(path)) {
-        if (entry.is_regular_file()) {
-            std::string filepath = entry.path().string();
-            std::string ext = entry.path().extension().string();
+    // recursive_directory_iterator throws if handed a regular file instead
+    // of a directory (e.g. --path foo.cpp by mistake) -- catch that here
+    // with a clear message instead of letting it crash the whole program.
+    if (!fs::is_directory(path)) {
+        std::cerr << "Error: Path is not a directory: " << path << "\n";
+        return files;
+    }
 
-            if (ext == ".cpp" || ext == ".h") {
-                if (!shouldIgnore(filepath, ignorePaths)) {
-                    files.push_back(filepath);
+    try {
+        // skip_permission_denied keeps one locked-down subfolder from
+        // throwing and aborting the entire scan -- it just gets skipped.
+        auto options = fs::directory_options::skip_permission_denied;
+        for (const auto& entry : fs::recursive_directory_iterator(path, options)) {
+            if (entry.is_regular_file()) {
+                std::string filepath = entry.path().string();
+                std::string ext = entry.path().extension().string();
+
+                if (ext == ".cpp" || ext == ".h") {
+                    if (!shouldIgnore(filepath, ignorePaths)) {
+                        files.push_back(filepath);
+                    }
                 }
             }
         }
+    } catch (const fs::filesystem_error& e) {
+        std::cerr << "Error while scanning " << path << ": " << e.what() << "\n";
     }
 
     return files;
