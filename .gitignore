@@ -1,5 +1,6 @@
 ﻿build/
 report.txt
 report.html
+report.json
 libclang.def
 model/
