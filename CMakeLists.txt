@@ -4,6 +4,16 @@ project(CodeDuplicationDetector)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+# Without this, CMake/MinGW builds with no optimization at all by default --
+# fine for small test files, but the O(n^2) duplicate-detection pass becomes
+# painfully slow on a real codebase with thousands of functions (this is
+# exactly what made the ImGui demo look "stuck"). Defaulting to Release
+# turns on -O2, which speeds up exactly the loops that need it.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+
 include_directories(include)
 include_directories("C:/Program Files/LLVM/include")
 include_directories("C:/onnxruntime-win-x64-1.26.0/include")

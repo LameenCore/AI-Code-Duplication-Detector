@@ -8,6 +8,7 @@ struct VisitorData {
     std::vector<Function>* functions;
     std::string filename;
     std::string fileContent;
+    int skippedCount = 0;
 };
 
 CXChildVisitResult visitor(CXCursor cursor, CXCursor parent, CXClientData clientData) {
@@ -23,6 +24,20 @@ CXChildVisitResult visitor(CXCursor cursor, CXCursor parent, CXClientData client
         unsigned startOffset, endOffset;
         clang_getSpellingLocation(startLoc, nullptr, nullptr, nullptr, &startOffset);
         clang_getSpellingLocation(endLoc, nullptr, nullptr, nullptr, &endOffset);
+
+        // On heavily macro-expanded real-world code (e.g. ImGui's IMGUI_API /
+        // IM_ASSERT macros), a function's start or end location can resolve
+        // through the macro expansion into a *different* file than the one
+        // we read into fileContent -- the offset is valid for that other
+        // file, not this one, so it can land past fileContent's actual size.
+        // substr() would throw std::out_of_range and crash the whole scan
+        // over one function; skip it instead and keep going.
+        size_t contentSize = data->fileContent.size();
+        if (startOffset > contentSize || endOffset > contentSize || endOffset < startOffset) {
+            data->skippedCount++;
+            clang_disposeString(name);
+            return CXChildVisit_Recurse;
+        }
 
         std::string body = data->fileContent.substr(startOffset, endOffset - startOffset);
 
@@ -68,6 +83,13 @@ std::vector<Function> extractFunctionsWithClang(const std::string& filePath) {
 
     CXCursor rootCursor = clang_getTranslationUnitCursor(unit);
     clang_visitChildren(rootCursor, visitor, &data);
+
+    if (data.skippedCount > 0) {
+        std::cerr << "Warning: skipped " << data.skippedCount << " function(s) in "
+                  << filePath << " with out-of-range source offsets "
+                     "(likely macro-expanded signatures) -- not a crash, "
+                     "just incomplete coverage for those functions.\n";
+    }
 
     clang_disposeTranslationUnit(unit);
     clang_disposeIndex(index);
