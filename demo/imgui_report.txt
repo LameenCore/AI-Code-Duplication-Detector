@@ -1,6 +1,6 @@
 ============================================================
    AI-GENERATED CODE DUPLICATION DETECTOR
-   Report generated: 2026-06-30 00:48:09
+   Report generated: 2026-06-30 17:14:19
    Scanned path: C:\Users\Admin\Desktop\imgui
 ============================================================
 
