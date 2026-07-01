@@ -4,6 +4,8 @@ A C++ command-line tool that scans a C++ codebase for duplicated functions — b
 
 Built as a portfolio project to demonstrate systems-level C++ engineering: libclang AST traversal, ONNX Runtime inference, algorithm design, real-world performance optimization, and clean CLI tooling.
 
+![DeepScan Engine Report](demo/report_preview.png)
+
 ---
 
 ## Features
@@ -14,7 +16,7 @@ Built as a portfolio project to demonstrate systems-level C++ engineering: libcl
 - **Semantic duplicate detection** via CodeBERT embeddings + cosine similarity (Pass 3) — catches structurally different but functionally equivalent code that edit-distance misses
 - **Z-score based semantic outlier flagging** — surfaces functions that are unusually similar to the rest of the codebase semantically
 - **Per-pair refactoring suggestions** — tells you whether to extract a shared helper in the same file or move it to a common header across files
-- **Codebase health score** (A–F grade) — single metric combining duplication rate and semantic duplicate density, written into every report
+- **Codebase health score** (A+–F grade) — single metric combining duplication rate and semantic duplicate density, written into every report
 - **Three output formats**: colored terminal output, standalone HTML report with a health badge, and machine-readable JSON
 - **Config file support** — store common flags in a `.txt` file and pass it with `--config`
 - **Git-only mode** (`--git-only`) — limits the scan to files tracked by git, skipping generated or vendored code
@@ -139,7 +141,7 @@ Pass it with:
 
 Scanning [Dear ImGui](https://github.com/ocornut/imgui) (a real-world 50k+ line C++ GUI library):
 
-```
+```powershell
 .\detector.exe --path "C:\imgui" --threshold 90 ^
   --ignore backends --ignore examples --ignore misc ^
   --output ..\demo\imgui_report.txt ^
@@ -149,21 +151,15 @@ Scanning [Dear ImGui](https://github.com/ocornut/imgui) (a real-world 50k+ line 
 
 **Results**: 1,964 functions extracted, 1,899 duplicate pairs found at ≥90% similarity.
 
-Sample findings:
+![Terminal output showing colored duplicate pair results](demo/terminal_preview.png)
 
-```
-[#1] 100.0% similarity
-  File 1 : imgui_widgets.cpp   Func 1 : DragFloat
-  File 2 : imgui_widgets.cpp   Func 2 : DragInt
-  Suggestion : Extract a shared helper for 'DragFloat' and 'DragInt' --
-               both already live in imgui_widgets.cpp, so this is a same-file refactor.
+Each pair comes with a ranked similarity score and an actionable refactoring suggestion:
 
-[#2] 95.1% similarity
-  File 1 : imgui.cpp           Func 1 : PairComparerByID
-  File 2 : imgui_widgets.cpp   Func 2 : PairComparerByValueInt
-  Suggestion : Extract a shared helper -- move into a common header so
-               imgui.cpp and imgui_widgets.cpp can both call it.
-```
+![Duplicate pairs list with EXACT badges and refactoring suggestions](demo/all_functions_preview.png)
+
+The HTML report also includes a side-by-side diff view of the highest-similarity pair so you can see exactly what was duplicated:
+
+![Side-by-side diff view of top duplicate pair](demo/sumary_report_preview.png)
 
 Full output saved in [`demo/`](demo/).
 
@@ -196,7 +192,7 @@ Full output saved in [`demo/`](demo/).
 │   └── test_main.cpp         # Lightweight unit tests (no external framework)
 ├── tools/
 │   └── export_codebert.py    # Exports CodeBERT from HuggingFace to ONNX
-├── demo/                     # ImGui demo scan output (txt, html, json)
+├── demo/                     # ImGui demo scan output + screenshots
 ├── myconfig.txt              # Example config file demonstrating --config flag
 ├── CMakeLists.txt
 └── LICENSE
